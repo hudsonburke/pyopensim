@@ -44,7 +44,7 @@ wheel.expand-macos-universal-tags = true
 # Don't specify wheel.packages - let CMake handle the installation
 
 # Include stub files in the wheel for PEP 561 compliance
-wheel.packages = ["pyopensim", "pyopensim-stubs"]
+wheel.packages = ["pyopensim"]
 
 # Build configuration for faster, more verbose builds
 build.verbose = true
