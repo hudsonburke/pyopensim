@@ -10,6 +10,8 @@
   <a href="https://pepy.tech/projects/pyopensim"><img src="https://static.pepy.tech/personalized-badge/pyopensim?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads" alt="downloads"></a>
 </p>
 
+> ⚠️ **Installation Note**: Please install from PyPI (`pip install pyopensim`) or use pre-built wheels from releases. Do not use `pip install git+https://...` as it will attempt a 30+ minute source build.
+
 **PyOpenSim**: Unofficial Portable Python bindings for [OpenSim](https://opensim.stanford.edu/), which is an open source software system for biomechanical modeling, simulation and analysis.
 
 ## Key Features
@@ -28,6 +30,31 @@ pip install pyopensim
 ```
 
 No additional setup required! All OpenSim dependencies are bundled in the wheel.
+
+### Development/Pre-release Installation
+
+**Important**: Do NOT install directly from GitHub using `pip install git+https://...` as this will attempt to build OpenSim from source (which takes 30+ minutes and requires extensive build dependencies).
+
+Instead, use one of these methods:
+
+**Option 1: Install from GitHub Release (Recommended)**
+```bash
+# Download a specific wheel from releases
+pip install "https://github.com/hudsonburke/pyopensim/releases/download/v4.5.2/pyopensim-4.5.2-cp312-cp312-linux_x86_64.whl"
+```
+
+**Option 2: Install from PyPI test server**
+```bash
+pip install --index-url https://test.pypi.org/simple/ pyopensim
+```
+
+**Option 3: Build locally (for development)**
+```bash
+git clone --recursive https://github.com/hudsonburke/pyopensim.git
+cd pyopensim
+# This will take 30+ minutes as it builds OpenSim from source
+pip install -e .
+```
 
 ## Why pyopensim?
 
