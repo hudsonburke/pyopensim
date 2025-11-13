@@ -1,4 +1,14 @@
 from typing import Any, overload
+# SimTK type aliases
+# SimTK type aliases
+# SimTK type aliases
+MultibodySystem = Any
+
+Mat = Any
+Vec = Any
+
+Real = float  # SimTK::Real is typically double
+
 
 class ActivationCoordinateActuator:
     def CreateForceSetOfCoordinateActuatorsForModel(self, s: State, aModel: Model, aOptimalForce: float, aIncludeLockedAndConstrainedCoordinates: bool) -> Any: ...
@@ -3860,8 +3870,6 @@ class PolynomialPathFitter:
     def SafeCopy(self, aObject: Object) -> Any: ...
     @overload
     def __init__(self) -> None: ...
-    @overload
-    def __init__(self, arg2: PolynomialPathFitter) -> None: ...
     @overload
     def __init__(self, arg2: PolynomialPathFitter) -> None: ...
     def appendCoordinateSamplingBounds(self, *args, **kwargs) -> Any: ...

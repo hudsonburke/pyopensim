@@ -49,9 +49,15 @@ def fix_malformed_self_parameters(content: str) -> str:
 
 
 def fix_duplicate_self_parameters(content: str) -> str:
-    """Fix cases where self appears twice like 'self, self, param'."""
+    """Fix cases where self appears twice like 'self, self, param' or 'self, self: Type'."""
     # Fix patterns like "self, self, param" -> "self, param"
     content = re.sub(r'\bself,\s*self,\s*', 'self, ', content)
+    
+    # Fix patterns like "(self, self: Type)" -> "(self)" in __init__ and other methods
+    # This handles SWIG Director classes that sometimes generate duplicate self
+    # Use more flexible matching to handle edge cases
+    content = re.sub(r'\(self,\s*self:\s*[A-Za-z_][\w]*\s*\)', r'(self)', content)
+    
     return content
 
 
@@ -91,6 +97,89 @@ def fix_missing_type_imports(content: str) -> str:
             # Add new typing import with all needed imports
             import_line = 'from typing import ' + ', '.join(imports_to_add)
             lines.insert(0, import_line)
+    
+    return '\n'.join(lines)
+
+
+def fix_undefined_simbody_types(content: str) -> str:
+    """Fix undefined SimTK/Simbody types by adding type aliases.
+    
+    SimTK C++ types like Real, Array_, ArrayIndexTraits are exposed through
+    SWIG but may not have proper type definitions in stubs. This function
+    adds appropriate type aliases.
+    """
+    lines = content.split('\n')
+    
+    # Check if file has undefined types that need fixing
+    # Common SimTK types that appear in parameters but may not be defined
+    undefined_types = {
+        'Real': 'float',  # SimTK::Real is typically double
+        'Array_': 'int',  # Array index type
+        'ArrayIndexTraits': 'int',  # Array index traits type
+        'InverseRotation_': 'Any',  # SimTK template type
+        'Mat': 'Any',  # Matrix type (generic)
+        'Matrix_': 'Any',  # Matrix template type
+        'VectorView_': 'Any',  # Vector view template type
+        'MatrixView_': 'Any',  # Matrix view template type
+        'Quaternion_': 'Any',  # Quaternion template type
+        'Rotation_': 'Any',  # Rotation template type
+        'Vec': 'Any',  # Vector template type (generic)
+        'BodyOrSpaceType': 'int',  # Enum for body or space type
+        'RowVector_': 'Any',  # Row vector template type
+        'RowVectorView_': 'Any',  # Row vector view template type
+        'RowVectorBase': 'Any',  # Row vector base type
+        'MultibodySystem': 'Any',  # Simbody multibody system type
+        'Visualizer': 'Any',  # Simbody visualizer type
+        'DecorationGenerator': 'Any',  # Decoration generator type
+        'Transform_': 'Any',  # Transform template type
+        'InverseTransform_': 'Any',  # Inverse transform template type
+        'UnitVec': 'Any',  # Unit vector type
+        'Vector_': 'Any',  # Vector template type
+        'VectorBase': 'Any',  # Vector base type
+    }
+    
+    # Check which types are actually used but not defined
+    types_needed = {}
+    for type_name, type_value in undefined_types.items():
+        # Check if type is used in content
+        if type_name in content:
+            # Check if it's already defined (as class or alias)
+            # Use word boundaries to avoid matching substrings like Mat in Matrix
+            class_pattern = rf'^class {re.escape(type_name)}[:\(]'
+            alias_pattern = rf'^{re.escape(type_name)} ='
+            has_class = bool(re.search(class_pattern, content, re.MULTILINE))
+            has_alias = bool(re.search(alias_pattern, content, re.MULTILINE))
+            
+            if not (has_class or has_alias):
+                types_needed[type_name] = type_value
+    
+    if not types_needed:
+        return content
+    
+    # Find where to insert type aliases (after imports, before first class)
+    insert_pos = 0
+    for i, line in enumerate(lines):
+        if line.startswith('from ') or line.startswith('import ') or line.startswith('#'):
+            insert_pos = i + 1
+        elif line.startswith('class ') or line.startswith('def '):
+            break
+    
+    # Build type alias declarations
+    type_aliases = ['# SimTK type aliases']
+    for type_name in sorted(types_needed.keys()):
+        type_value = types_needed[type_name]
+        comment = ''
+        if type_name == 'Real':
+            comment = '  # SimTK::Real is typically double'
+        elif type_name.endswith('_'):
+            comment = f'  # {type_name} template type'
+        type_aliases.append(f'{type_name} = {type_value}{comment}')
+    
+    type_aliases.append('')  # Add blank line after aliases
+    
+    # Insert after imports
+    for alias in reversed(type_aliases):
+        lines.insert(insert_pos, alias)
     
     return '\n'.join(lines)
 
@@ -156,6 +245,181 @@ def fix_missing_overload_decorators(content: str) -> str:
     return '\n'.join(result)
 
 
+def remove_duplicate_overloads(content: str) -> str:
+    """Remove duplicate overload signatures that are identical.
+    
+    SWIG sometimes generates multiple overload signatures that are identical
+    in Python (differ only in C++ const-ness). This removes exact duplicates.
+    """
+    lines = content.split('\n')
+    result = []
+    seen_signatures = {}  # Maps (class_name, func_signature) -> line_index
+    i = 0
+    
+    current_class = None
+    
+    while i < len(lines):
+        line = lines[i]
+        
+        # Track current class
+        class_match = re.match(r'^class (\w+)', line)
+        if class_match:
+            current_class = class_match.group(1)
+            seen_signatures = {}  # Reset for new class
+            result.append(line)
+            i += 1
+            continue
+        
+        # Check if this is an @overload decorator
+        if re.match(r'^\s+@overload\s*$', line):
+            # Get the function signature on next line
+            if i + 1 < len(lines):
+                func_line = lines[i + 1]
+                func_match = re.match(r'^(\s+)(def \w+\([^)]*\)\s*->\s*.*:.*)', func_line)
+                if func_match:
+                    signature = func_match.group(2).strip()
+                    key = (current_class, signature)
+                    
+                    # Check if we've seen this exact signature before
+                    if key in seen_signatures:
+                        # Skip this @overload and the function line (duplicate)
+                        i += 2
+                        continue
+                    else:
+                        seen_signatures[key] = i
+        
+        result.append(line)
+        i += 1
+    
+    return '\n'.join(result)
+
+
+def remove_orphaned_overload_decorators(content: str) -> str:
+    """Remove @overload decorators from functions that aren't actually overloaded.
+    
+    After removing duplicate overloads, some functions may be left with an @overload
+    decorator but no actual overloads. This removes those decorators.
+    """
+    lines = content.split('\n')
+    
+    # First pass: identify which functions are truly overloaded
+    overloaded_functions = set()  # Set of (class_name, func_name) that have multiple versions
+    current_class = None
+    func_counts = {}  # Count occurrences of each function
+    
+    for i, line in enumerate(lines):
+        class_match = re.match(r'^class (\w+)', line)
+        if class_match:
+            current_class = class_match.group(1)
+            continue
+        
+        func_match = re.match(r'^\s+def (\w+)\(', line)
+        if func_match:
+            func_name = func_match.group(1)
+            key = (current_class, func_name)
+            func_counts[key] = func_counts.get(key, 0) + 1
+    
+    # Mark functions that appear multiple times as truly overloaded
+    for key, count in func_counts.items():
+        if count > 1:
+            overloaded_functions.add(key)
+    
+    # Second pass: remove @overload from functions that aren't overloaded
+    result = []
+    current_class = None
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        
+        class_match = re.match(r'^class (\w+)', line)
+        if class_match:
+            current_class = class_match.group(1)
+            result.append(line)
+            i += 1
+            continue
+        
+        # Check if this is an @overload decorator
+        if re.match(r'^\s+@overload\s*$', line) and i + 1 < len(lines):
+            # Get the function on the next line
+            func_line = lines[i + 1]
+            func_match = re.match(r'^\s+def (\w+)\(', func_line)
+            
+            if func_match:
+                func_name = func_match.group(1)
+                key = (current_class, func_name)
+                
+                # If this function is NOT truly overloaded, skip the @overload decorator
+                if key not in overloaded_functions:
+                    i += 1  # Skip the @overload line
+                    result.append(func_line)  # Add the function line
+                    i += 1
+                    continue
+        
+        result.append(line)
+        i += 1
+    
+    return '\n'.join(result)
+
+
+def add_missing_final_overload_decorators(content: str) -> str:
+    """Add @overload decorator to functions that are missing it but should have it.
+    
+    When there are multiple overloads of a function, ALL of them should have
+    @overload, including the last one. This function finds cases where earlier
+    overloads have @overload but the final one doesn't.
+    """
+    lines = content.split('\n')
+    result = []
+    i = 0
+    
+    current_class = None
+    
+    while i < len(lines):
+        line = lines[i]
+        
+        # Track current class to avoid cross-class pollution
+        class_match = re.match(r'^class (\w+)', line)
+        if class_match:
+            current_class = class_match.group(1)
+            result.append(line)
+            i += 1
+            continue
+        
+        # Check if this is a function definition WITHOUT @overload
+        func_match = re.match(r'^(\s+)def (\w+)\(', line)
+        if func_match:
+            prev_line = lines[i-1] if i > 0 else ''
+            has_overload = re.match(r'^\s+@overload\s*$', prev_line)
+            
+            if not has_overload:
+                indent = func_match.group(1)
+                func_name = func_match.group(2)
+                
+                # Look backward to see if there's another overload of this function WITH @overload
+                # BUT stay within the current class
+                found_overload_before = False
+                for j in range(max(0, i - 20), i):
+                    # Stop if we hit a class definition (went out of current class)
+                    if re.match(r'^class \w+', lines[j]):
+                        break
+                    
+                    if re.match(rf'^{re.escape(indent)}def {re.escape(func_name)}\(', lines[j]):
+                        # Check if this earlier occurrence has @overload
+                        if j > 0 and re.match(r'^\s+@overload\s*$', lines[j-1]):
+                            found_overload_before = True
+                            break
+                
+                # If we found an earlier overload with @overload, add @overload to this one too
+                if found_overload_before:
+                    result.append(f'{indent}@overload')
+        
+        result.append(line)
+        i += 1
+    
+    return '\n'.join(result)
+
+
 def fix_common_swig_issues(content: str) -> str:
     """Fix common SWIG-generated stub issues."""
     # Fix empty parameter lists that should have self
@@ -184,8 +448,12 @@ def post_process_stub_file(file_path: Path) -> None:
         content = fix_malformed_self_parameters(content)
         content = fix_duplicate_self_parameters(content)
         content = fix_missing_type_imports(content)
+        content = fix_undefined_simbody_types(content)
         content = fix_common_swig_issues(content)
         content = fix_missing_overload_decorators(content)
+        content = remove_duplicate_overloads(content)
+        content = remove_orphaned_overload_decorators(content)
+        content = add_missing_final_overload_decorators(content)
         
         # Only write back if content changed
         if content != original_content:
