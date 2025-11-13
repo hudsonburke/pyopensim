@@ -7,9 +7,16 @@ from pathlib import Path
 # Add the scripts directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from generate_stubs import (fix_missing_overload_decorators, fix_missing_type_imports, 
-                            fix_undefined_simbody_types, remove_duplicate_overloads, 
-                            remove_orphaned_overload_decorators, add_missing_final_overload_decorators)
+from generate_stubs import (
+    fix_missing_overload_decorators,
+    fix_missing_type_imports,
+    fix_undefined_simbody_types,
+    fix_init_return_types,
+    fix_duplicate_parameters,
+    remove_duplicate_overloads,
+    remove_orphaned_overload_decorators,
+    add_missing_final_overload_decorators,
+)
 
 def fix_stub_file(file_path: Path):
     """Apply overload fixes to a single stub file."""
@@ -19,6 +26,8 @@ def fix_stub_file(file_path: Path):
         content = f.read()
     
     original = content
+    content = fix_init_return_types(content)
+    content = fix_duplicate_parameters(content)
     content = fix_missing_overload_decorators(content)
     content = fix_missing_type_imports(content)
     content = fix_undefined_simbody_types(content)

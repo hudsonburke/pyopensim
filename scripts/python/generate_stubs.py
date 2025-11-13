@@ -61,6 +61,82 @@ def fix_duplicate_self_parameters(content: str) -> str:
     return content
 
 
+def fix_init_return_types(content: str) -> str:
+    """Fix __init__ methods that return Any instead of None.
+    
+    SWIG sometimes generates __init__ methods with return type Any,
+    but __init__ must always return None in Python.
+    """
+    # Fix __init__ methods with -> Any return type
+    content = re.sub(
+        r'(\bdef __init__\([^)]*\))\s*->\s*Any\s*:',
+        r'\1 -> None:',
+        content
+    )
+    
+    return content
+
+
+def fix_duplicate_parameters(content: str) -> str:
+    """Fix methods with duplicate parameter names.
+    
+    Sometimes SWIG generates methods with duplicate parameter names
+    from overloaded C++ methods with different const qualifiers.
+    """
+    lines = content.split('\n')
+    result = []
+    
+    for line in lines:
+        # Check if this is a function definition
+        if 'def ' in line and '(' in line:
+            # Extract the parameter list
+            match = re.search(r'def\s+\w+\((.*?)\)\s*->', line)
+            if match:
+                params_str = match.group(1)
+                params = [p.strip() for p in params_str.split(',') if p.strip()]
+                
+                # Check for duplicates
+                seen_names = set()
+                new_params = []
+                has_duplicates = False
+                
+                for param in params:
+                    # Get parameter name (before : if typed)
+                    param_name = param.split(':')[0].strip()
+                    
+                    if param_name in seen_names:
+                        # Duplicate found - rename it
+                        counter = 2
+                        new_name = f"{param_name}{counter}"
+                        while new_name in seen_names:
+                            counter += 1
+                            new_name = f"{param_name}{counter}"
+                        
+                        # Reconstruct the parameter with new name
+                        if ':' in param:
+                            type_part = param.split(':', 1)[1]
+                            param = f"{new_name}: {type_part}"
+                        else:
+                            param = new_name
+                        has_duplicates = True
+                    
+                    seen_names.add(param.split(':')[0].strip())
+                    new_params.append(param)
+                
+                # Reconstruct the line if we found duplicates
+                if has_duplicates:
+                    new_params_str = ', '.join(new_params)
+                    line = re.sub(
+                        r'(def\s+\w+\().*?(\)\s*->)',
+                        rf'\1{new_params_str}\2',
+                        line
+                    )
+        
+        result.append(line)
+    
+    return '\n'.join(result)
+
+
 def fix_missing_type_imports(content: str) -> str:
     """Add missing type imports that are commonly needed."""
     lines = content.split('\n')
@@ -106,36 +182,43 @@ def fix_undefined_simbody_types(content: str) -> str:
     
     SimTK C++ types like Real, Array_, ArrayIndexTraits are exposed through
     SWIG but may not have proper type definitions in stubs. This function
-    adds appropriate type aliases.
+    adds appropriate type aliases, preferring to reference actual Python
+    classes where they exist.
     """
     lines = content.split('\n')
     
     # Check if file has undefined types that need fixing
     # Common SimTK types that appear in parameters but may not be defined
+    # For templated C++ types (ending in _), we map to the concrete Python class if it exists
     undefined_types = {
-        'Real': 'float',  # SimTK::Real is typically double
-        'Array_': 'int',  # Array index type
+        # Fundamental types
+        'Real': 'float',  # SimTK::Real is double in C++
+        'Array_': 'int',  # Array index/size type
         'ArrayIndexTraits': 'int',  # Array index traits type
-        'InverseRotation_': 'Any',  # SimTK template type
-        'Mat': 'Any',  # Matrix type (generic)
-        'Matrix_': 'Any',  # Matrix template type
-        'VectorView_': 'Any',  # Vector view template type
-        'MatrixView_': 'Any',  # Matrix view template type
-        'Quaternion_': 'Any',  # Quaternion template type
-        'Rotation_': 'Any',  # Rotation template type
-        'Vec': 'Any',  # Vector template type (generic)
-        'BodyOrSpaceType': 'int',  # Enum for body or space type
-        'RowVector_': 'Any',  # Row vector template type
-        'RowVectorView_': 'Any',  # Row vector view template type
-        'RowVectorBase': 'Any',  # Row vector base type
-        'MultibodySystem': 'Any',  # Simbody multibody system type
-        'Visualizer': 'Any',  # Simbody visualizer type
-        'DecorationGenerator': 'Any',  # Decoration generator type
-        'Transform_': 'Any',  # Transform template type
-        'InverseTransform_': 'Any',  # Inverse transform template type
-        'UnitVec': 'Any',  # Unit vector type
-        'Vector_': 'Any',  # Vector template type
-        'VectorBase': 'Any',  # Vector base type
+        'BodyOrSpaceType': 'int',  # Enum for body or space reference frame
+        
+        # Template types that map to concrete classes (typedef Name_<Real> Name)
+        'Vec': 'Vec3',  # Vec<3> is the typical instantiation
+        'UnitVec': 'UnitVec3',  # UnitVec<Real,1> typedef
+        'Vector_': 'Vector',  # Vector_<Real> typedef
+        'VectorBase': 'VectorBaseDouble',  # VectorBase<Real> typedef
+        'VectorView_': 'VectorView',  # VectorView_<Real> typedef
+        'RowVector_': 'RowVector',  # RowVector_<Real> typedef  
+        'RowVectorBase': 'RowVectorBaseDouble',  # RowVectorBase<Real> typedef
+        'RowVectorView_': 'RowVectorView',  # RowVectorView_<Real> typedef
+        'Rotation_': 'Rotation',  # Rotation_<Real> typedef
+        'InverseRotation_': 'InverseRotation',  # InverseRotation_<Real> typedef
+        'Transform_': 'Transform',  # Transform_<Real> typedef
+        'InverseTransform_': 'Any',  # InverseTransform_<Real> (may not be exposed)
+        'Quaternion_': 'Quaternion',  # Quaternion_<Real> typedef
+        'Mat': 'Mat33',  # Mat<M,N> - typically Mat33 (3x3)
+        'Matrix_': 'Matrix',  # Matrix_<Real> typedef
+        'MatrixView_': 'MatrixView',  # MatrixView_<Real> typedef
+        
+        # Types that may not be fully exposed
+        'MultibodySystem': 'Any',  # Simbody multibody system (C++ only)
+        'Visualizer': 'Any',  # Simbody visualizer (C++ only)
+        'DecorationGenerator': 'Any',  # Decoration generator (C++ only)
     }
     
     # Check which types are actually used but not defined
@@ -164,15 +247,29 @@ def fix_undefined_simbody_types(content: str) -> str:
         elif line.startswith('class ') or line.startswith('def '):
             break
     
-    # Build type alias declarations
-    type_aliases = ['# SimTK type aliases']
+    # Build type alias declarations with informative comments
+    type_aliases = ['# SimTK/Simbody type aliases for C++ template instantiations']
     for type_name in sorted(types_needed.keys()):
         type_value = types_needed[type_name]
         comment = ''
+        
+        # Add helpful comments explaining the C++ to Python mapping
         if type_name == 'Real':
-            comment = '  # SimTK::Real is typically double'
+            comment = '  # SimTK::Real (double precision)'
+        elif type_name in ('Array_', 'ArrayIndexTraits'):
+            comment = '  # C++ size_t for array indexing'
+        elif type_name == 'BodyOrSpaceType':
+            comment = '  # Enum for reference frame'
+        elif type_name.endswith('_') and type_value != 'Any':
+            # Template type that maps to concrete class
+            comment = f'  # C++ template type, typically {type_value}'
         elif type_name.endswith('_'):
-            comment = f'  # {type_name} template type'
+            comment = '  # C++ template type'
+        elif type_value == 'Any' and type_name not in ('InverseTransform_',):
+            comment = '  # C++ type not fully exposed to Python'
+        elif type_value.startswith('Vec') or type_value.startswith('Mat'):
+            comment = f'  # Typically instantiated as {type_value}'
+            
         type_aliases.append(f'{type_name} = {type_value}{comment}')
     
     type_aliases.append('')  # Add blank line after aliases
@@ -447,6 +544,8 @@ def post_process_stub_file(file_path: Path) -> None:
         original_content = content
         content = fix_malformed_self_parameters(content)
         content = fix_duplicate_self_parameters(content)
+        content = fix_init_return_types(content)
+        content = fix_duplicate_parameters(content)
         content = fix_missing_type_imports(content)
         content = fix_undefined_simbody_types(content)
         content = fix_common_swig_issues(content)

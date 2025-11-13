@@ -1,36 +1,29 @@
 from typing import Any, overload
-# SimTK type aliases
-# SimTK type aliases
-# SimTK type aliases
-# SimTK type aliases
-# SimTK type aliases
-DecorationGenerator = Any
-InverseTransform_ = Any  # InverseTransform_ template type
-MultibodySystem = Any
-Transform_ = Any  # Transform_ template type
-UnitVec = Any
-VectorBase = Any
-Vector_ = Any  # Vector_ template type
-Visualizer = Any
 
-Mat = Any
-RowVectorBase = Any
-Vec = Any
-
-BodyOrSpaceType = int
-RowVectorView_ = Any  # RowVectorView_ template type
-RowVector_ = Any  # RowVector_ template type
-
-InverseRotation_ = Any  # InverseRotation_ template type
-MatrixView_ = Any  # MatrixView_ template type
-Matrix_ = Any  # Matrix_ template type
-Quaternion_ = Any  # Quaternion_ template type
-Rotation_ = Any  # Rotation_ template type
-VectorView_ = Any  # VectorView_ template type
-
-Real = float  # SimTK::Real is typically double
-Array_ = int  # Array index type
-ArrayIndexTraits = int  # Array index traits type
+# SimTK/Simbody type aliases for C++ template instantiations
+Array_ = int  # C++ size_t for array indexing
+ArrayIndexTraits = int  # C++ size_t for array indexing
+BodyOrSpaceType = int  # Enum for reference frame
+DecorationGenerator = Any  # C++ type not fully exposed to Python
+InverseRotation_ = InverseRotation  # C++ template type, typically InverseRotation
+InverseTransform_ = Any  # C++ template type
+Mat = Mat33  # Typically instantiated as Mat33
+Matrix_ = Matrix  # C++ template type, typically Matrix
+MatrixView_ = MatrixView  # C++ template type, typically MatrixView
+MultibodySystem = Any  # C++ type not fully exposed to Python
+Quaternion_ = Quaternion  # C++ template type, typically Quaternion
+Real = float  # SimTK::Real (double precision)
+Rotation_ = Rotation  # C++ template type, typically Rotation
+RowVector_ = RowVector  # C++ template type, typically RowVector
+RowVectorBase = RowVectorBaseDouble  # C++ template type, typically RowVectorBaseDouble
+RowVectorView_ = RowVectorView  # C++ template type, typically RowVectorView
+Transform_ = Transform  # C++ template type, typically Transform
+UnitVec = UnitVec3  # Typically instantiated as UnitVec3
+Vec = Vec3  # Typically instantiated as Vec3
+VectorBase = VectorBaseDouble  # C++ template type, typically VectorBaseDouble
+VectorView_ = VectorView  # C++ template type, typically VectorView
+Vector_ = Vector  # C++ template type, typically Vector
+Visualizer = Any  # C++ type not fully exposed to Python
 
 
 class ArrayDecorativeGeometry:
@@ -3421,7 +3414,7 @@ class StdVectorVec3:
     thisown: Any
 
 class SwigPyIterator:
-    def __init__(self, *args, **kwargs) -> Any: ...
+    def __init__(self, *args, **kwargs) -> None: ...
     def advance(self, n: Any) -> Any: ...
     def copy(self) -> Any: ...
     def decr(self, n: Any) -> Any: ...
