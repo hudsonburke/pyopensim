@@ -62,25 +62,98 @@ def fix_missing_type_imports(content: str) -> str:
     # Check if we need to add imports
     has_typing_import = any('from typing import' in line for line in lines[:10])
     has_any_import = any('Any' in line for line in lines[:10])
+    needs_overload = '@overload' in content
+    has_overload_import = any('overload' in line and 'from typing import' in line for line in lines[:10])
+    
+    imports_to_add = []
     
     # If we have type annotations but no typing imports, add them
     if 'Any' in content and not has_any_import:
+        imports_to_add.append('Any')
+    
+    if needs_overload and not has_overload_import:
+        imports_to_add.append('overload')
+    
+    if imports_to_add:
         if has_typing_import:
-            # Find the typing import line and add Any to it
+            # Find the typing import line and add missing imports to it
             for i, line in enumerate(lines):
                 if line.startswith('from typing import'):
-                    if 'Any' not in line:
-                        # Add Any to existing import
-                        if line.endswith('import'):
-                            lines[i] = line + ' Any'
-                        else:
-                            lines[i] = line + ', Any'
+                    for import_name in imports_to_add:
+                        if import_name not in line:
+                            # Add import to existing import line
+                            if line.endswith('import'):
+                                lines[i] = line + ' ' + import_name
+                            else:
+                                lines[i] = line + ', ' + import_name
                     break
         else:
-            # Add new typing import
-            lines.insert(0, 'from typing import Any')
+            # Add new typing import with all needed imports
+            import_line = 'from typing import ' + ', '.join(imports_to_add)
+            lines.insert(0, import_line)
     
     return '\n'.join(lines)
+
+
+def fix_missing_overload_decorators(content: str) -> str:
+    """Add @overload decorator to first overloaded function when missing.
+    
+    When stubgen generates overloaded functions, the first one often lacks
+    the @overload decorator. This function finds such cases and adds the
+    missing decorator.
+    """
+    lines = content.split('\n')
+    result = []
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check if this is a method/function definition
+        if re.match(r'^\s+def \w+\(', line):
+            # Extract the function name and indentation
+            match = re.match(r'^(\s+)def (\w+)\(', line)
+            if match:
+                indent = match.group(1)
+                func_name = match.group(2)
+                
+                # Look ahead to see if there's an overloaded version
+                # (same function name with @overload decorator)
+                j = i + 1
+                found_overload = False
+                while j < len(lines):
+                    next_line = lines[j]
+                    
+                    # Check for @overload decorator followed by same function
+                    if re.match(r'^\s+@overload\s*$', next_line):
+                        # Check if next non-empty line has same function name
+                        k = j + 1
+                        while k < len(lines) and lines[k].strip() == '':
+                            k += 1
+                        if k < len(lines):
+                            func_match = re.match(rf'^{indent}def ({func_name})\(', lines[k])
+                            if func_match:
+                                found_overload = True
+                                break
+                    
+                    # Stop looking if we hit another method/function or class
+                    if re.match(r'^\s+(def \w+\(|class \w+)', next_line):
+                        if not re.match(rf'^\s+@overload', lines[j-1] if j > 0 else ''):
+                            break
+                    
+                    j += 1
+                
+                # If we found an overload but current line doesn't have @overload,
+                # add it
+                if found_overload:
+                    prev_line = lines[i-1] if i > 0 else ''
+                    if not re.match(r'^\s+@overload\s*$', prev_line):
+                        result.append(f'{indent}@overload')
+        
+        result.append(line)
+        i += 1
+    
+    return '\n'.join(result)
 
 
 def fix_common_swig_issues(content: str) -> str:
@@ -112,6 +185,7 @@ def post_process_stub_file(file_path: Path) -> None:
         content = fix_duplicate_self_parameters(content)
         content = fix_missing_type_imports(content)
         content = fix_common_swig_issues(content)
+        content = fix_missing_overload_decorators(content)
         
         # Only write back if content changed
         if content != original_content:
