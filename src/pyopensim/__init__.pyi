@@ -1,70 +1,53 @@
 from typing import Any
-from . import actuators, analyses, common, simbody, simulation, tools
+
+# Core modules - always available
+from . import actuators as actuators
+from . import analyses as analyses
+from . import common as common
+from . import simbody as simbody
+from . import simulation as simulation
+from . import tools as tools
 
 # Version is imported from package metadata
 __version__: str
 __opensim_version__: str
 
-# Optional modules - mirror the runtime try/except behavior
-try:
-    from . import examplecomponents
-except ImportError:
-    examplecomponents = None
+# Optional modules - may not be present
+examplecomponents: Any
+moco: Any
+report: Any
 
-try:
-    from . import moco
-except ImportError:
-    moco = None
+# Re-exported classes from simbody (available at package level)
+from .simbody import Vec3 as Vec3
+from .simbody import Rotation as Rotation
+from .simbody import Transform as Transform
+from .simbody import Inertia as Inertia
 
-try:
-    from . import report
-except ImportError:
-    report = None
+# Re-exported classes from common (available at package level)
+from .common import Component as Component
+from .common import Storage as Storage
+from .common import Array as Array
+from .common import StepFunction as StepFunction
+from .common import ConsoleReporter as ConsoleReporter
 
-# Re-exported classes from simbody
-from .simbody import Vec3, Rotation, Transform, Inertia, Gray, SimTK_PI
+# Re-exported classes from simulation (available at package level)
+from .simulation import Model as Model
+from .simulation import Manager as Manager
+from .simulation import Body as Body
+from .simulation import PinJoint as PinJoint
+from .simulation import PhysicalOffsetFrame as PhysicalOffsetFrame
+from .simulation import Ellipsoid as Ellipsoid
+from .simulation import Millard2012EquilibriumMuscle as Millard2012EquilibriumMuscle
+from .simulation import PrescribedController as PrescribedController
+from .simulation import InverseKinematicsSolver as InverseKinematicsSolver
+from .simulation import InverseDynamicsSolver as InverseDynamicsSolver
 
-# Re-exported classes from common
-from .common import Component, Property, Storage, Array, StepFunction, ConsoleReporter
+# Re-exported classes from actuators (available at package level)
+from .actuators import CoordinateActuator as CoordinateActuator
+from .actuators import PointActuator as PointActuator
 
-# Re-exported classes from simulation
-from .simulation import (
-    Model, 
-    Manager, 
-    State, 
-    Body, 
-    PinJoint, 
-    PhysicalOffsetFrame,
-    Ellipsoid, 
-    Millard2012EquilibriumMuscle, 
-    PrescribedController,
-    InverseKinematicsSolver, 
-    InverseDynamicsSolver
-)
-
-# Re-exported classes from actuators
-from .actuators import Muscle, CoordinateActuator, PointActuator
-
-# Re-exported classes from tools
-from .tools import InverseKinematicsTool, InverseDynamicsTool, ForwardTool, AnalyzeTool
-
-__all__ = [
-    # Core modules
-    'simbody', 'common', 'simulation', 'actuators', 'analyses', 'tools',
-    # Optional modules (if available)
-    'examplecomponents', 'moco', 'report',
-    # Common classes at top level for convenience
-    'Model', 'Manager', 'State', 'Body',
-    'Component', 'Property',
-    'Vec3', 'Rotation', 'Transform', 'Inertia',
-    'PinJoint', 'PhysicalOffsetFrame', 'Ellipsoid',
-    'Millard2012EquilibriumMuscle', 'PrescribedController',
-    'StepFunction', 'ConsoleReporter',
-    'Gray', 'SimTK_PI',
-    'Storage', 'Array',
-    'InverseKinematicsSolver', 'InverseDynamicsSolver',
-    'Muscle', 'CoordinateActuator', 'PointActuator',
-    'InverseKinematicsTool', 'InverseDynamicsTool',
-    'ForwardTool', 'AnalyzeTool',
-    '__version__', '__opensim_version__'
-]
+# Re-exported classes from tools (available at package level)
+from .tools import InverseKinematicsTool as InverseKinematicsTool
+from .tools import InverseDynamicsTool as InverseDynamicsTool
+from .tools import ForwardTool as ForwardTool
+from .tools import AnalyzeTool as AnalyzeTool

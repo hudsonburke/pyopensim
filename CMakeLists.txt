@@ -664,21 +664,26 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# Copy stub files to the python package directory
+# Copy stub files directly into the pyopensim package directory (inline stubs for PEP 561)
 add_custom_command(
-    OUTPUT "${OPENSIM_PYTHON_BINARY_DIR}/pyopensim-stubs"
+    OUTPUT "${OPENSIM_PYTHON_BINARY_DIR}/pyopensim/__init__.pyi"
     DEPENDS "${STUB_FILES_DIR}/pyopensim/__init__.pyi"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${STUB_FILES_DIR}/pyopensim"
-        "${OPENSIM_PYTHON_BINARY_DIR}/pyopensim-stubs"
-    COMMENT "Copying stub files to package directory"
+        "${OPENSIM_PYTHON_BINARY_DIR}/pyopensim"
+    COMMENT "Copying stub files to package directory (inline stubs)"
 )
 
 # Umbrella target for assembling the python bindings in the build tree.
-add_custom_target(PythonBindings ALL DEPENDS ${OPENSIM_PYTHON_PACKAGE_FILES} "${OPENSIM_PYTHON_BINARY_DIR}/pyopensim-stubs")
+add_custom_target(PythonBindings ALL DEPENDS ${OPENSIM_PYTHON_PACKAGE_FILES} "${OPENSIM_PYTHON_BINARY_DIR}/pyopensim/__init__.pyi")
 
 # Require the libraries to be built.
 add_dependencies(PythonBindings ${OPENSIM_PYTHON_PACKAGE_LIBRARY_TARGETS})
+
+# Install stub files (.pyi) that were copied to the package directory
+install(DIRECTORY "${OPENSIM_PYTHON_BINARY_DIR}/pyopensim/"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/pyopensim"
+    FILES_MATCHING PATTERN "*.pyi")
 
 set_target_properties(PythonBindings PROPERTIES
     PROJECT_LABEL "Python - umbrella target"
@@ -910,7 +915,5 @@ if(PYOPENSIM_BUILD_WITH_OPENSIM)
     endif()
 endif()
 
-# Install stub files for IDE support
-install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/stubs/pyopensim/"
-    DESTINATION "${CMAKE_INSTALL_PREFIX}/pyopensim-stubs"
-    FILES_MATCHING PATTERN "*.pyi")
+# Note: Stub files (.pyi) are copied to the package build directory and will be
+# installed automatically with the rest of the package files
